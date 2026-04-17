@@ -48,19 +48,37 @@
         </div>
     </div>
 
+    <!-- Supabase SDK 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
+        // Supabase 설정
+        const SUPABASE_URL = 'https://uinxxjfydegnknpyxbxg.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_yWvOagW3pSYy5S4VW0_Z4Q_aH88rT9Q';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
         const btn = document.getElementById('gbSubmitBtn');
         const nameInput = document.getElementById('gbName');
         const textInput = document.getElementById('gbText');
         const messageList = document.getElementById('gbMessageList');
 
-        const STORAGE_KEY = 'resume_guestbook_data';
+        // 메시지 불러오기
+        async function loadMessages() {
+            const { data: msgs, error } = await _supabase
+                .from('guestbook')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-        function loadMessages() {
-            const msgs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            if (error) {
+                console.error('Error loading messages:', error);
+                // 테이블이 아직 없거나 설정 전일 경우를 대비해 안내 메시지 표시
+                messageList.innerHTML = '<p style="color:#ef4444;text-align:center;margin-top:3rem;">방명록을 불러오는 중 오류가 발생했습니다.<br>테이블 생성 및 권한 설정을 확인해 주세요.</p>';
+                return;
+            }
+
             messageList.innerHTML = '';
             
-            if (msgs.length === 0) {
+            if (!msgs || msgs.length === 0) {
                 messageList.innerHTML = '<p style="color:#9ca3af;text-align:center;margin-top:3rem;">아직 등록된 방명록이 없습니다.<br>첫 번째 메시지를 남겨보세요!</p>';
                 return;
             }
@@ -69,8 +87,7 @@
                 const div = document.createElement('div');
                 div.className = 'gb-message';
                 
-                // Formatted date string
-                const d = new Date(msg.date);
+                const d = new Date(msg.created_at);
                 const dateString = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 
                 div.innerHTML = `
@@ -84,7 +101,7 @@
             });
         }
 
-        // Basic XSS protection for display
+        // 기본 HTML 이스케이프 함수
         function escapeHTML(str) {
             if(!str) return '';
             return str.replace(/[&<>'"]/g, 
@@ -98,7 +115,8 @@
             );
         }
 
-        btn.addEventListener('click', () => {
+        // 메시지 남기기 버튼 클릭 이벤트
+        btn.addEventListener('click', async () => {
             const name = nameInput.value.trim();
             const text = textInput.value.trim();
 
@@ -107,20 +125,27 @@
                 return;
             }
 
-            const msgs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-            msgs.unshift({
-                name,
-                text,
-                date: new Date().toISOString()
-            });
+            // 전송 중 버튼 비활성화
+            btn.disabled = true;
+            btn.textContent = '전송 중...';
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
-            nameInput.value = '';
-            textInput.value = '';
-            loadMessages();
+            const { error } = await _supabase
+                .from('guestbook')
+                .insert([{ name, text }]);
+
+            if (error) {
+                alert('메시지 저장에 실패했습니다: ' + error.message);
+            } else {
+                nameInput.value = '';
+                textInput.value = '';
+                await loadMessages();
+            }
+
+            btn.disabled = false;
+            btn.textContent = '메시지 남기기';
         });
 
-        // Initialize display
+        // 초기 메시지 로드
         loadMessages();
 
         // Calendar Logic
@@ -168,5 +193,6 @@
 
         renderCalendar(currentDate);
     </script>
+
 </body>
 </html>
